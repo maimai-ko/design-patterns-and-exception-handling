@@ -1,8 +1,6 @@
 #include <iostream>
-#include <fstream>
 #include <string>
 #include <limits>
-#include <iomanip>
 
 using namespace std;
 
@@ -14,10 +12,7 @@ private:
 
 public:
     ECommerceException(const string &msg) : message(msg) {}
-    const char *what() const noexcept override
-    {
-        return message.c_str();
-    }
+    const char *what() const noexcept override { return message.c_str(); }
 };
 
 class InvalidIDException : public ECommerceException
@@ -203,13 +198,9 @@ public:
         }
 
         cout << "\nShopping Cart:\n";
-        cout << "--------------------------------------------------------------\n";
-        cout << left << setw(8) << "ID"
-             << setw(20) << "Name"
-             << setw(10) << "Price"
-             << setw(8) << "Qty"
-             << setw(10) << "Total" << "\n";
-        cout << "--------------------------------------------------------------\n";
+        cout << "---------------------------------------------------------\n";
+        cout << "ID   Name            Price   Qty  Total\n";
+        cout << "---------------------------------------------------------\n";
 
         double total = 0;
         for (int i = 0; i < count; i++)
@@ -218,15 +209,22 @@ public:
             double itemTotal = items[i]->getTotalPrice();
             total += itemTotal;
 
-            cout << left << setw(8) << p.getId()
-                 << setw(20) << p.getName()
-                 << "$" << setw(9) << fixed << setprecision(0) << p.getPrice()
-                 << setw(8) << items[i]->getQuantity()
-                 << "$" << fixed << setprecision(0) << itemTotal << "\n";
+            cout.width(4);
+            cout << p.getId();
+            cout << "  ";
+            cout.width(14);
+            cout << left << p.getName();
+            cout.width(7);
+            cout << right << (int)p.getPrice();
+            cout.width(5);
+            cout << right << items[i]->getQuantity();
+            cout.width(7);
+            cout << right << (int)itemTotal << "\n";
         }
-        cout << "--------------------------------------------------------------\n";
-        cout << "Total: $" << fixed << setprecision(0) << total << "\n";
-        cout << "--------------------------------------------------------------\n";
+
+        cout << "---------------------------------------------------------\n";
+        cout << "Total: " << (int)total << "\n";
+        cout << "---------------------------------------------------------\n";
     }
 
     double getTotalAmount() const
@@ -255,91 +253,82 @@ public:
         return count == 0;
     }
 
-    string getCartContents() const
-    {
-        if (count == 0)
-            return "";
-        string contents;
-        for (int i = 0; i < count; i++)
-        {
-            const Product &p = items[i]->getProduct();
-            contents += to_string(p.getId()) + "\t" + p.getName() + "\t" +
-                        to_string(p.getPrice()) + "\t" + to_string(items[i]->getQuantity()) + "\n";
-        }
-        return contents;
-    }
+    CartItem **getItems() const { return items; }
+    int getItemCount() const { return count; }
 };
 
 ShoppingCart *ShoppingCart::instance = nullptr;
 
-void viewOrders()
+// Order class
+class Order
 {
-    ifstream logFile("orders.log");
-    if (!logFile.is_open())
+private:
+    int orderId;
+    string paymentMethod;
+    CartItem **items;
+    int itemCount;
+    double totalAmount;
+
+public:
+    Order(int id, string method, CartItem **cartItems, int count, double total)
+        : orderId(id), paymentMethod(method), itemCount(count), totalAmount(total)
     {
-        throw NoOrdersException();
-    }
-
-    string line;
-    bool hasOrders = false;
-
-    cout << "\n===== Order History =====\n";
-
-    while (getline(logFile, line))
-    {
-        if (line.find("[LOG] -> Order ID: ") != string::npos)
+        items = new CartItem *[itemCount];
+        for (int i = 0; i < itemCount; i++)
         {
-            hasOrders = true;
-
-            // Extract order ID
-            size_t idStart = line.find("Order ID: ") + 10;
-            size_t idEnd = line.find(" has been");
-            string orderId = line.substr(idStart, idEnd - idStart);
-
-            // Extract payment method
-            size_t methodStart = line.find("using ") + 6;
-            size_t methodEnd = line.find(".");
-            string paymentMethod = line.substr(methodStart, methodEnd - methodStart);
-
-            cout << left << setw(8) << "ID"
-                 << setw(20) << "Name"
-                 << setw(10) << "Price"
-                 << setw(8) << "Qty" << "\n";
-
-            // Read and display products until empty line or end of file
-            while (getline(logFile, line) && !line.empty())
-            {
-                // Parse product line (format: ID Name Price Quantity)
-                size_t tab1 = line.find('\t');
-                size_t tab2 = line.find('\t', tab1 + 1);
-                size_t tab3 = line.find('\t', tab2 + 1);
-
-                if (tab1 != string::npos && tab2 != string::npos && tab3 != string::npos)
-                {
-                    string id = line.substr(0, tab1);
-                    string name = line.substr(tab1 + 1, tab2 - tab1 - 1);
-                    string price = line.substr(tab2 + 1, tab3 - tab2 - 1);
-                    string qty = line.substr(tab3 + 1);
-
-                    cout << id << "\t" << name << "\t$" << price << "\t" << qty << "\n";
-                }
-            }
-
-            // Read and display total if available
-            if (getline(logFile, line) && line.find("Total Amount: $") != string::npos)
-            {
-                cout << line << "\n";
-            }
+            items[i] = new CartItem(*cartItems[i]);
         }
     }
 
-    if (!hasOrders)
+    ~Order()
+    {
+        for (int i = 0; i < itemCount; i++)
+        {
+            delete items[i];
+        }
+        delete[] items;
+    }
+
+    void display() const
+    {
+        cout << "\nOrder ID: " << orderId << "\n";
+        cout << "Payment Method: " << paymentMethod << "\n";
+        cout << "Products:\n";
+        cout << "ID   Name            Price   Qty\n";
+        for (int i = 0; i < itemCount; i++)
+        {
+            Product p = items[i]->getProduct();
+            cout.width(4);
+            cout << p.getId();
+            cout << "  ";
+            cout.width(14);
+            cout << left << p.getName();
+            cout.width(7);
+            cout << right << (int)p.getPrice();
+            cout.width(5);
+            cout << right << items[i]->getQuantity() << "\n";
+        }
+        cout << "Total Amount: " << (int)totalAmount << "\n";
+    }
+};
+
+// Order storage
+Order *orders[100];
+int orderCount = 0;
+
+void viewOrders()
+{
+    if (orderCount == 0)
     {
         throw NoOrdersException();
     }
-
+    cout << "\n===== Order History =====\n";
+    for (int i = 0; i < orderCount; i++)
+    {
+        cout << "---------------------------------\n";
+        orders[i]->display();
+    }
     cout << "---------------------------------\n";
-    logFile.close();
 }
 
 int main()
@@ -351,6 +340,8 @@ int main()
         new Product(3, "Headphones", 99.99),
         new Product(4, "Mouse", 19.99),
         new Product(5, "Keyboard", 49.99)};
+
+    int nextOrderId = 1;
 
     while (true)
     {
@@ -384,13 +375,18 @@ int main()
                 {
                     cout << "\nAvailable Products:\n";
                     cout << "---------------------------------\n";
-                    cout << "ID\tName\t\tPrice\n";
+                    cout << "ID   Name            Price\n";
                     cout << "---------------------------------\n";
 
                     for (int i = 0; i < productCount; i++)
                     {
-                        cout << products[i]->getId() << "\t" << products[i]->getName()
-                             << "\t$" << products[i]->getPrice() << "\n";
+                        cout.width(4);
+                        cout << products[i]->getId();
+                        cout << "  ";
+                        cout.width(14);
+                        cout << left << products[i]->getName();
+                        cout.width(7);
+                        cout << right << (int)products[i]->getPrice() << "\n";
                     }
                     cout << "---------------------------------\n";
 
@@ -424,23 +420,11 @@ int main()
                     ShoppingCart::getInstance()->addProduct(*selectedProduct);
                     cout << "Product added successfully!\n";
 
-                    try
-                    {
-                        char input;
-                        cout << "Do you want to add another product? (Y/N): ";
-                        cin >> input;
-                        addMore = toupper(input);
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                        if (addMore != 'Y' && addMore != 'N')
-                        {
-                            throw ECommerceException("Please enter Y or N.");
-                        }
-                    }
-                    catch (const ECommerceException &e)
-                    {
-                        cerr << "Error: " << e.what() << endl;
-                        addMore = 'N';
-                    }
+                    cout << "Do you want to add another product? (Y/N): ";
+                    cin >> addMore;
+                    addMore = toupper(addMore);
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
                 } while (addMore == 'Y');
             }
             else if (choice == 2)
@@ -450,23 +434,11 @@ int main()
 
                 if (!cart->isEmpty())
                 {
+                    cout << "Do you want to check out all the products? (Y/N): ";
                     char checkoutChoice;
-                    try
-                    {
-                        cout << "Do you want to check out all the products? (Y/N): ";
-                        cin >> checkoutChoice;
-                        checkoutChoice = toupper(checkoutChoice);
-                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
-                        if (checkoutChoice != 'Y' && checkoutChoice != 'N')
-                        {
-                            throw ECommerceException("Please enter Y or N.");
-                        }
-                    }
-                    catch (const ECommerceException &e)
-                    {
-                        cerr << "Error: " << e.what() << endl;
-                        continue;
-                    }
+                    cin >> checkoutChoice;
+                    checkoutChoice = toupper(checkoutChoice);
+                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
 
                     if (checkoutChoice == 'Y')
                     {
@@ -476,19 +448,7 @@ int main()
                         cout << "3. GCash\n";
 
                         int paymentChoice;
-                        try
-                        {
-                            paymentChoice = getValidatedInput<int>("Enter your choice (1-3): ");
-                            if (paymentChoice < 1 || paymentChoice > 3)
-                            {
-                                throw ECommerceException("Invalid payment method. Please select 1-3.");
-                            }
-                        }
-                        catch (const ECommerceException &e)
-                        {
-                            cerr << "Error: " << e.what() << endl;
-                            continue;
-                        }
+                        paymentChoice = getValidatedInput<int>("Enter your choice (1-3): ");
 
                         PaymentStrategy *strategy = nullptr;
                         switch (paymentChoice)
@@ -507,25 +467,9 @@ int main()
                         double total = cart->getTotalAmount();
                         strategy->pay(total);
 
-                        time_t now = time(nullptr);
-                        string orderId = "ORD" + to_string(now);
-
-                        // In the checkout section (around line 400 in your original code):
-                        ofstream logFile("orders.log", ios::app);
-                        if (logFile.is_open())
-                        {
-                            logFile << "[LOG] -> Order ID: " << orderId
-                                    << " has been successfully checked out and paid using "
-                                    << strategy->getMethodName() << ".\n";
-                            logFile << cart->getCartContents();
-                            logFile << "Total Amount: $" << total << "\n\n"; // Add total and extra newline
-                            logFile.close();
-                        }
+                        orders[orderCount++] = new Order(nextOrderId++, strategy->getMethodName(), cart->getItems(), cart->getItemCount(), total);
 
                         cout << "\nYou have successfully checked out the products!\n";
-                        cout << "Order ID: " << orderId << "\n";
-                        cout << "Payment Method: " << strategy->getMethodName() << "\n";
-                        cout << "Total Amount: $" << total << "\n";
 
                         cart->clearCart();
                         delete strategy;
@@ -534,14 +478,7 @@ int main()
             }
             else if (choice == 3)
             {
-                try
-                {
-                    viewOrders();
-                }
-                catch (const ECommerceException &e)
-                {
-                    cerr << "Error: " << e.what() << endl;
-                }
+                viewOrders();
             }
             else if (choice == 4)
             {
@@ -558,6 +495,10 @@ int main()
     for (int i = 0; i < productCount; i++)
     {
         delete products[i];
+    }
+    for (int i = 0; i < orderCount; i++)
+    {
+        delete orders[i];
     }
 
     return 0;
