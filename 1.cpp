@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 #include <limits>
+#include <fstream>
+#include <ctime>
 
 using namespace std;
 
@@ -268,11 +270,17 @@ private:
     CartItem **items;
     int itemCount;
     double totalAmount;
+    string timestamp;
 
 public:
     Order(int id, string method, CartItem **cartItems, int count, double total)
         : orderId(id), paymentMethod(method), itemCount(count), totalAmount(total)
     {
+        // Get current time for timestamp
+        time_t now = time(0);
+        timestamp = ctime(&now);
+        timestamp = timestamp.substr(0, timestamp.length() - 1); // Remove newline
+
         items = new CartItem *[itemCount];
         for (int i = 0; i < itemCount; i++)
         {
@@ -292,6 +300,7 @@ public:
     void display() const
     {
         cout << "\nOrder ID: " << orderId << "\n";
+        cout << "Date: " << timestamp << "\n";
         cout << "Payment Method: " << paymentMethod << "\n";
         cout << "Products:\n";
         cout << "ID   Name            Price   Qty\n";
@@ -310,11 +319,66 @@ public:
         }
         cout << "Total Amount: " << (int)totalAmount << "\n";
     }
+
+    void logToFile(ofstream &file) const
+    {
+        file << "Order ID: " << orderId << "\n";
+        file << "Date: " << timestamp << "\n";
+        file << "Payment Method: " << paymentMethod << "\n";
+        file << "Products:\n";
+        file << "ID   Name            Price   Qty\n";
+        for (int i = 0; i < itemCount; i++)
+        {
+            Product p = items[i]->getProduct();
+            file.width(4);
+            file << p.getId();
+            file << "  ";
+            file.width(14);
+            file << left << p.getName();
+            file.width(7);
+            file << right << (int)p.getPrice();
+            file.width(5);
+            file << right << items[i]->getQuantity() << "\n";
+        }
+        file << "Total Amount: " << (int)totalAmount << "\n";
+        file << "---------------------------------\n\n";
+    }
 };
 
 // Order storage
 Order *orders[100];
 int orderCount = 0;
+const string ORDER_LOG_FILE = "order_log.txt";
+
+void initializeOrderLog()
+{
+    // Clear the log file at startup
+    ofstream outFile(ORDER_LOG_FILE, ios::out | ios::trunc);
+    if (outFile.is_open())
+    {
+        outFile << "===== ORDER LOG =====\n";
+        outFile << "Application started. Log cleared.\n\n";
+        outFile.close();
+    }
+    else
+    {
+        cerr << "Warning: Could not open order log file for clearing.\n";
+    }
+}
+
+void logOrderToFile(const Order &order)
+{
+    ofstream outFile(ORDER_LOG_FILE, ios::out | ios::app);
+    if (outFile.is_open())
+    {
+        order.logToFile(outFile);
+        outFile.close();
+    }
+    else
+    {
+        cerr << "Warning: Could not open order log file for writing.\n";
+    }
+}
 
 void viewOrders()
 {
@@ -333,6 +397,9 @@ void viewOrders()
 
 int main()
 {
+    // Initialize order log (clears previous content)
+    initializeOrderLog();
+
     const int productCount = 5;
     Product *products[productCount] = {
         new Product(1, "Laptop", 999.99),
@@ -467,7 +534,11 @@ int main()
                         double total = cart->getTotalAmount();
                         strategy->pay(total);
 
-                        orders[orderCount++] = new Order(nextOrderId++, strategy->getMethodName(), cart->getItems(), cart->getItemCount(), total);
+                        Order *newOrder = new Order(nextOrderId++, strategy->getMethodName(), cart->getItems(), cart->getItemCount(), total);
+                        orders[orderCount++] = newOrder;
+
+                        // Log the order to file
+                        logOrderToFile(*newOrder);
 
                         cout << "\nYou have successfully checked out the products!\n";
 
